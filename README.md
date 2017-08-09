@@ -19,3 +19,8 @@ To do a quick test that will print out the clients on the
 default site,
 
 	go run demo/list-sta.go
+
+The UniFi API is not documented, so this is reverse engineered from a few sources:
+
+   * https://dl.ubnt.com/unifi/5.5.20/unifi_sh_api
+   * https://github.com/malle-pietje/UniFi-API-browser/blob/master/phpapi/class.unifi.php
