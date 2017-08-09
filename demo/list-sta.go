@@ -32,4 +32,13 @@ func main() {
 	for _, client := range clients {
 		fmt.Printf("%+v\n", client)
 	}
+
+	log.Printf("Fetching wireless networks...")
+	wlans, err := api.ListWirelessNetworks("default")
+	if err != nil {
+		log.Fatalf("Fetching wireless networks: %v", err)
+	}
+	for _, wlan := range wlans {
+		fmt.Printf("%+v\n", wlan)
+	}
 }

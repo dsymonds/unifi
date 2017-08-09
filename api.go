@@ -209,12 +209,43 @@ type Client struct {
 }
 
 func (api *API) ListClients(site string) ([]Client, error) {
-	raw, err := api.get("/api/s/default/stat/sta")
+	raw, err := api.get("/api/s/" + site + "/stat/sta")
 	if err != nil {
 		return nil, err
 	}
 	var resp struct {
 		Data []Client `json:"data"`
+		Meta struct {
+			Code string `json:"rc"`
+		} `json:"meta"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("parsing response: %v", err)
+	}
+	// TODO: check resp.Meta.Code == "ok"
+	return resp.Data, nil
+}
+
+type WirelessNetwork struct {
+	ID      string `json:"_id"`
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+
+	Security string `json:"security"`
+	WPAMode  string `json:"wpa_mode"`
+
+	Guest bool `json:"is_guest,omitempty"`
+
+	// TODO: other fields
+}
+
+func (api *API) ListWirelessNetworks(site string) ([]WirelessNetwork, error) {
+	raw, err := api.get("/api/s/" + site + "/list/wlanconf")
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Data []WirelessNetwork `json:"data"`
 		Meta struct {
 			Code string `json:"rc"`
 		} `json:"meta"`
