@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // API is an interface to a UniFi controller.
@@ -205,7 +206,24 @@ type Client struct {
 	MAC string `json:"mac"`
 	IP  string `json:"ip"`
 
+	LastSeen time.Time
+
 	// TODO: other fields
+}
+
+func (c *Client) UnmarshalJSON(data []byte) error {
+	type Alias Client
+	aux := struct {
+		*Alias
+
+		LastSeen int64 `json:"last_seen"`
+		// TODO: do this for MAC, IP
+	}{Alias: (*Alias)(c)}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	c.LastSeen = time.Unix(aux.LastSeen, 0)
+	return nil
 }
 
 func (api *API) ListClients(site string) ([]Client, error) {
