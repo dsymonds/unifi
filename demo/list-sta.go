@@ -18,12 +18,6 @@ func main() {
 		}
 	}()
 
-	// TODO: make this automatic
-	log.Printf("Logging in...")
-	if err := api.Login(); err != nil {
-		log.Fatalf("Logging in: %v", err)
-	}
-
 	log.Printf("Fetching clients...")
 	clients, err := api.ListClients("default")
 	if err != nil {

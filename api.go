@@ -64,7 +64,6 @@ func NewAPI(as AuthStore) (*API, error) {
 		as:         as,
 		auth:       auth,
 	}
-	//api.hc.CheckRedirect = api.checkRedirect
 	return api, nil
 }
 
@@ -74,56 +73,54 @@ func (api *API) WriteConfig() error {
 	return api.as.Save(api.auth)
 }
 
-var errRedirect = errors.New("internal error: login redirect detected")
-
-/*
-func (api *API) checkRedirect(req *http.Request, via []*http.Request) error {
-	if strings.HasPrefix(req.URL.Path, "/login/") {
-		return errRedirect
-	}
-	return fmt.Errorf("hit redirect for %v", req.URL) // shouldn't happen
-}
-*/
-
-//func (api *API) Get(u string) (body []byte, err error) { return api.get(u) }
-
 func (api *API) get(u string) (body []byte, err error) {
 	u = api.baseURL() + u
 
 	var resp *http.Response
-	for try := 1; try <= 2; try++ {
+	triedLogin := false
+	for {
 		resp, err = api.hc.Get(u)
-		if ue, ok := err.(*url.Error); ok {
-			err = ue.Err
+		if err != nil {
+			return nil, err
 		}
-		// UniFi will yield a JSON response to indicate no/bad auth.
-		/*
-			if err == errRedirect {
-				if err = api.login(); err == nil {
-					continue // next try
-				}
+		body, err = ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode == 200 {
+			return body, nil
+		}
+
+		if resp.StatusCode == http.StatusUnauthorized && !triedLogin { // 401
+			var dec struct {
+				Meta struct {
+					Code string `json:"rc"`
+					Msg  string `json:"msg"`
+				} `json:"meta"`
 			}
-		*/
-		//if err == nil {
-		break
-		//}
+			if err := json.Unmarshal(body, &dec); err != nil {
+				return nil, fmt.Errorf("parsing 401 response: %v", err)
+			}
+			if dec.Meta.Code == "error" && dec.Meta.Msg == "api.err.LoginRequired" {
+				if err := api.login(); err != nil {
+					return nil, err
+				}
+				triedLogin = true
+				continue
+			}
+		}
+
+		return nil, fmt.Errorf("HTTP response %s", resp.Status)
 	}
-	if err != nil {
-		return nil, err
-	}
-	body, err = ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err == nil && resp.StatusCode != 200 {
-		err = fmt.Errorf("HTTP response %s", resp.Status)
-	}
-	return body, err
 }
 
 func (api *API) baseURL() string {
 	return "https://" + api.auth.ControllerHost + ":8443"
 }
 
-func (api *API) Login() error {
+func (api *API) login() error {
 	// TODO: proper JSON encoding
 	body := fmt.Sprintf(`{'username':'%s', 'password':'%s'}`, api.auth.Username, api.auth.Password)
 	req, err := http.NewRequest("POST", api.baseURL()+"/api/login", strings.NewReader(body))
