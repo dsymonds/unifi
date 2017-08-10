@@ -6,7 +6,6 @@ package unifi
 import (
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -73,46 +72,51 @@ func (api *API) WriteConfig() error {
 	return api.as.Save(api.auth)
 }
 
-func (api *API) get(u string) (body []byte, err error) {
+func (api *API) get(u string, dst interface{}) error {
 	u = api.baseURL() + u
 
-	var resp *http.Response
+	dec := struct {
+		Data interface{} `json:"data"`
+		Meta struct {
+			Code string `json:"rc"`
+			Msg  string `json:"msg"`
+		} `json:"meta"`
+	}{Data: dst}
+
 	triedLogin := false
 	for {
-		resp, err = api.hc.Get(u)
+		resp, err := api.hc.Get(u)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		body, err = ioutil.ReadAll(resp.Body)
+		body, err := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			return nil, err
+			return err
+		}
+
+		if err := json.Unmarshal(body, &dec); err != nil {
+			return fmt.Errorf("parsing response body: %v", err)
 		}
 
 		if resp.StatusCode == 200 {
-			return body, nil
+			if dec.Meta.Code != "ok" {
+				return fmt.Errorf("non-ok return code %q (%s)", dec.Meta.Code, dec.Meta.Msg)
+			}
+			return nil
 		}
 
 		if resp.StatusCode == http.StatusUnauthorized && !triedLogin { // 401
-			var dec struct {
-				Meta struct {
-					Code string `json:"rc"`
-					Msg  string `json:"msg"`
-				} `json:"meta"`
-			}
-			if err := json.Unmarshal(body, &dec); err != nil {
-				return nil, fmt.Errorf("parsing 401 response: %v", err)
-			}
 			if dec.Meta.Code == "error" && dec.Meta.Msg == "api.err.LoginRequired" {
 				if err := api.login(); err != nil {
-					return nil, err
+					return err
 				}
 				triedLogin = true
 				continue
 			}
 		}
 
-		return nil, fmt.Errorf("HTTP response %s", resp.Status)
+		return fmt.Errorf("HTTP response %s", resp.Status)
 	}
 }
 
@@ -224,21 +228,11 @@ func (c *Client) UnmarshalJSON(data []byte) error {
 }
 
 func (api *API) ListClients(site string) ([]Client, error) {
-	raw, err := api.get("/api/s/" + site + "/stat/sta")
-	if err != nil {
+	var resp []Client
+	if err := api.get("/api/s/"+site+"/stat/sta", &resp); err != nil {
 		return nil, err
 	}
-	var resp struct {
-		Data []Client `json:"data"`
-		Meta struct {
-			Code string `json:"rc"`
-		} `json:"meta"`
-	}
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return nil, fmt.Errorf("parsing response: %v", err)
-	}
-	// TODO: check resp.Meta.Code == "ok"
-	return resp.Data, nil
+	return resp, nil
 }
 
 type WirelessNetwork struct {
@@ -255,19 +249,10 @@ type WirelessNetwork struct {
 }
 
 func (api *API) ListWirelessNetworks(site string) ([]WirelessNetwork, error) {
-	raw, err := api.get("/api/s/" + site + "/list/wlanconf")
+	var resp []WirelessNetwork
+	err := api.get("/api/s/"+site+"/list/wlanconf", &resp)
 	if err != nil {
 		return nil, err
 	}
-	var resp struct {
-		Data []WirelessNetwork `json:"data"`
-		Meta struct {
-			Code string `json:"rc"`
-		} `json:"meta"`
-	}
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return nil, fmt.Errorf("parsing response: %v", err)
-	}
-	// TODO: check resp.Meta.Code == "ok"
-	return resp.Data, nil
+	return resp, nil
 }
