@@ -154,28 +154,16 @@ func (api *API) baseURL() string {
 }
 
 func (api *API) login() error {
-	// TODO: proper JSON encoding
-	body := fmt.Sprintf(`{'username':'%s', 'password':'%s'}`, api.auth.Username, api.auth.Password)
-	req, err := http.NewRequest("POST", api.baseURL()+"/api/login", strings.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("building login request: %v", err)
+	req := struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}{
+		Username: api.auth.Username,
+		Password: api.auth.Password,
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Referer", api.baseURL()+"/login")
-	resp, err := api.hc.Do(req)
-	if err != nil {
-		return fmt.Errorf("POSTing login form: %v", err)
-	}
-	_, err = ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return fmt.Errorf("reading login form response: %v", err)
-	}
-	// A successful response sets a cookie in api.hc.
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("login form response was %s", resp.Status)
-	}
-	return nil
+	return api.post("/api/login", &req, &json.RawMessage{}, reqOpts{
+		referer: api.baseURL() + "/login",
+	})
 }
 
 // An AuthStore is an interface for loading and saving authentication information.
