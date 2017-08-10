@@ -4,6 +4,7 @@ Package unifi provides programmatic access to UniFi hardware.
 package unifi
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -72,8 +73,36 @@ func (api *API) WriteConfig() error {
 	return api.as.Save(api.auth)
 }
 
-func (api *API) get(u string, dst interface{}) error {
+func (api *API) post(u string, src, dst interface{}, opts reqOpts) error {
 	u = api.baseURL() + u
+	body, err := json.Marshal(src)
+	if err != nil {
+		panic("internal error marshaling JSON POST body: " + err.Error())
+	}
+	req, err := http.NewRequest("POST", u, bytes.NewReader(body))
+	if err != nil {
+		panic("internal error: " + err.Error())
+	}
+	return api.doReq(req, dst, opts)
+}
+
+func (api *API) get(u string, dst interface{}, opts reqOpts) error {
+	u = api.baseURL() + u
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		panic("internal error: " + err.Error())
+	}
+	return api.doReq(req, dst, opts)
+}
+
+type reqOpts struct {
+	referer string
+}
+
+func (api *API) doReq(req *http.Request, dst interface{}, opts reqOpts) error {
+	if opts.referer != "" {
+		req.Header.Set("Referer", opts.referer)
+	}
 
 	dec := struct {
 		Data interface{} `json:"data"`
@@ -85,7 +114,7 @@ func (api *API) get(u string, dst interface{}) error {
 
 	triedLogin := false
 	for {
-		resp, err := api.hc.Get(u)
+		resp, err := api.hc.Do(req)
 		if err != nil {
 			return err
 		}
@@ -229,7 +258,7 @@ func (c *Client) UnmarshalJSON(data []byte) error {
 
 func (api *API) ListClients(site string) ([]Client, error) {
 	var resp []Client
-	if err := api.get("/api/s/"+site+"/stat/sta", &resp); err != nil {
+	if err := api.get("/api/s/"+site+"/stat/sta", &resp, reqOpts{}); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -250,7 +279,7 @@ type WirelessNetwork struct {
 
 func (api *API) ListWirelessNetworks(site string) ([]WirelessNetwork, error) {
 	var resp []WirelessNetwork
-	err := api.get("/api/s/"+site+"/list/wlanconf", &resp)
+	err := api.get("/api/s/"+site+"/list/wlanconf", &resp, reqOpts{})
 	if err != nil {
 		return nil, err
 	}
