@@ -273,3 +273,10 @@ func (api *API) ListWirelessNetworks(site string) ([]WirelessNetwork, error) {
 	}
 	return resp, nil
 }
+
+func (api *API) EnableWirelessNetwork(site, id string, enable bool) error {
+	req := struct {
+		Enabled bool `json:"enabled"`
+	}{enable}
+	return api.post("/api/s/"+site+"/upd/wlanconf/"+id, &req, &json.RawMessage{}, reqOpts{})
+}
